@@ -1,72 +1,173 @@
 import random
+import argparse
+import time
+
+WinningScore = 100
+
+
+class Dice:
+
+    def __init__(self):
+        self.sides = 6
+
+    def roll(self):
+        return random.randint(1, self.sides)
+
+
+class PlayerFactory:
+
+    def create_player(self, player_type):
+        if player_type == "human":
+            return Player(self)
+        elif player_type == "computer":
+            return ComputerPlayer(self)
+        else:
+            raise ValueError(f"Invalid player type: {player_type}")
+
 
 class Player:
+
     def __init__(self, name):
         self.name = name
-        self.score = 0
+        self.total_score = 0
         self.turn_score = 0
+        self.dice = Dice()
 
-    def roll_die(self):
-        roll = random.randint(1, 6)
-        print(f"{self.name} rolled a {roll}")
-        if roll == 1:
-            print(f"{self.name} scored 0 points this turn")
-            self.turn_score = 0
-            return False
-        else:
-            self.turn_score += roll
-            print(f"{self.name} has a turn score of {self.turn_score}")
-            return True
+    def get_total(self):
+        return self.total_score
 
-    def hold(self):
-        self.score += self.turn_score
-        print(f"{self.name} scored {self.turn_score} points this turn")
-        print(f"{self.name} now has a total score of {self.score}")
+    def get_name(self):
+        return self.name
+
+    def show_score(self):
+        print(f"{self.name} has {self.total_score} points")
+
+    def player_turn(self):
         self.turn_score = 0
+        while True:
+            choice = input("Enter 'r' to roll or 'h' to hold: ")
+            if choice.lower() == "r":
+                roll = self.dice.roll()
+                if roll == 1:
+                    print(f"{self.name} rolled a 1. You scored 0 points this turn.")
+                    self.turn_score = 0
+                    break
+                else:
+                    self.turn_score += roll
+                    print(f"{self.name} rolled a {roll} and now has a total score of {self.turn_score}")
+            elif choice.lower() == "h":
+                self.total_score += self.turn_score
+                break
+            else:
+                print("Invalid input. Enter 'r' to roll or 'h' to hold.")
 
-    def reset(self):
-        self.score = 0
-        self.turn_score = 0
 
 class ComputerPlayer(Player):
-    def __init__(self, name):
-        super().__init__(name)
 
-    def decide(self):
-        if self.turn_score < 20:
-            return 'r'
-        else:
-            return 'h'
+    def computer_turn(self):
+        # Roll the dice
+        while True:
+            roll = self.dice.roll()
 
-def get_players():
-    player1_name = input("Enter name of player 1: ")
-    player2_name = "Computer"
-    player1 = Player(player1_name)
-    player2 = ComputerPlayer(player2_name)
-    return player1, player2
+            if roll == 1:
+                self.turn_score = 0
+                print(f"Computer {self.name} rolled a 1! 0 points.")
+                return
 
-def play_game():
-    random.seed(0)
-    player1, player2 = get_players()
-    current_player = player1
-    while True:
-        print(f"{current_player.name}'s turn")
-        if isinstance(current_player, ComputerPlayer):
-            decision = current_player.decide()
-            print(f"{current_player.name} decided to {decision}")
-        else:
-            decision = input("Enter 'r' to roll or 'h' to hold: ")
-        if decision == 'r':
-            if not current_player.roll_die():
-                current_player = player2 if current_player == player1 else player1
-        elif decision == 'h':
-            current_player.hold()
-            if current_player.score >= 100:
-                print(f"{current_player.name} wins!")
-                break
-            current_player = player2 if current_player == player1 else player1
-        else:
-            print("Invalid input. Enter 'r' to roll or 'h' to hold")
+            else:
+                self.turn_score += roll
+                print(f"Computer {self.name} rolled a {roll}. Turn score: {self.turn_score}")
 
-if __name__ == '__main__':
-    play_game()
+                if self.turn_score >= min(25, 100 - self.total_score):
+                    self.total_score += self.turn_score
+
+                    self.turn_score = 0
+                    print(f"Computer {self.name} holds. ")
+                    return
+
+
+class Game:
+
+    def __init__(self, player1, player2):
+        self.players = [player1, player2]
+        self.current_player = player1
+        self.winner = None
+        self.turn_score = 0
+
+    def check_winner(self):
+        for player in self.players:
+            if player.get_total() >= WinningScore:
+                self.winner = player
+                return True
+
+    def play(self):
+        player_idx = 0
+        current_player = self.players[player_idx]
+        while not self.check_winner():
+            print(f"It's {current_player.get_name()}'s turn.")
+            if isinstance(current_player, ComputerPlayer):
+                current_player.computer_turn()
+            else:
+                current_player.player_turn()
+
+            current_player.show_score()
+
+            if player_idx == 0:
+                player_idx = 1
+            else:
+                player_idx = 0
+            current_player = self.players[player_idx]
+            print("\n" + "=" * 40)
+
+        print(f"{self.winner.get_name()} wins!")
+        self.winner.show_score()
+
+
+class TimedGameProxy(Game):
+    def __init__(self, player1, player2, time_limit=60):
+        super().__init__(player1, player2)
+        self.player_idx = 0
+        self.time_limit = time_limit
+        self.start_time = None
+        self.current_time = None
+
+    def check_time(self):
+        self.current_time = time.time()
+        if self.start_time is not None and self.current_time - self.start_time >= self.time_limit:
+            print("Time's up!")
+            return True
+        return False
+
+    def check_winner(self):
+        for player in self.players:
+            if player.get_total() >= WinningScore:
+                self.winner = player
+                return True
+
+    def timed_play(self):
+        pass
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Play a game of Pig.")
+    parser.add_argument("--player1", type=str, choices=["human", "computer"], help="Type of player 1", default="human")
+    parser.add_argument("--player2", type=str, choices=["human", "computer"], help="Type of player 2",
+                        default="computer")
+    parser.add_argument("--timed", action="store_true", help="Play a timed game")
+
+    args = parser.parse_args()
+
+    player1 = PlayerFactory.create_player("Player 1", "computer")
+    player2 = PlayerFactory.create_player("Player 2", "human")
+
+    if args.timed:
+        game = TimedGameProxy(player1, player2)
+        game.timed_play()
+    else:
+        game = Game(player1, player2)
+        game.play()
+
+
+if __name__ == "__main__":
+    main()
+
